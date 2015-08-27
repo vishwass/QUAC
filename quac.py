@@ -1,168 +1,210 @@
 from pyspark import SparkContext
-sc = SparkContext("local", "gamaquasi1")    
-from sets import Set
+sc = SparkContext("local[4]", "quasicliqueEnumeration", pyFiles=['quac.py'])
+
+
 import itertools
 import math
+import sys,getopt
+import base64
 from math import *
+from itertools import combinations
 from collections import namedtuple
 
 
 changevar =True
-C =  set()
-
 initialCvar = True
-textFile = sc.textFile("edges")
-linesWithSpark = textFile.filter(lambda line: "(" in line)
-firstmr = textFile.map(lambda line: (1,line)).reduceByKey(lambda a, b: a+"/"+b).collect()
-print firstmr
-a = firstmr[0][1]
-b = a.split("/")
-for s in b:
-    C.add(s)
-print C
+C = set()  #the set containing gamma quasi cliques
+gamma =0.66 #default value of gamma
+k=3   # default value of k-size of the clique after which gamma should be applied
 
 
-def trimx(y):
-    print "inside trim", y
+
+
+
+
+def trimx(y):  #returns a sorted list of nodes in the given clique 
+   
     x = str(y)
-    print "type is",type(x)
     for char in x:
             if char in "(,|)":
                  x = x.replace(char,'')    
     x=''.join(set(x))  
-    print "output trimx function:",x       
     return ''.join(sorted(x))
 
-def m2func(d):
-    print "inside m2func :",d,type(d)
-    d1 = trimx(str(d))
-    print d1,d
-    a = (d1,d)
-    print "output m2func:",a,type(a) 
-    return a
-    
 
-def ifmatch(a,b):
-    print "inside ifmatch:"
+
+
+def formNodeEdgeTuples(d): # forms tuples with sorted string of nodes as key and set of edges as values
+   
+    d1 = trimx(str(d))
+    return (d1,d)
+    
+     
+
+
+def ifmatch(a,b):       # function which checks if 2 cliques have a common vertex or node ,if they have a common vertex then it returns true
+   
     a1 = str(trimx(a))
     b1 = str(trimx(b))
-    print a1,b1,type(a1),type(b1)
     z = False
     for x in a1:
         for y in b1:
             if(x==y):
-                print x
-                print y
                 z = True
                 break 
-    print "output ifmatch: ",a,b,z            
     return z
-                
-    
-    
-def mr2func(line):
-   
-    print "inside mr2func:",line
-    sets= line[1].split("/")
-    global initialCvar
-    if initialCvar == True:
-        initialCvar= False
-          for h in sets:
-            C.add(h)
+     
 
-    lst = []  
-    finallst  = []
     
-    for s in sets:
-        print s
-        lst.append(s)
-        
+    
+def findCombinations(lst):   # function which forms combinations of different cliques having a common vertex or node
+
+    clist = []
         
     for i in range(0,len(lst)):
         for j in range(i+1,len(lst)):
-            if(ifmatch(lst[i],lst[j])):
-                finallst.append(lst[i]+"|"+lst[j])
+            if(ifmatch(lst[i],lst[j])):       #ifmatch() checks if if both of them have common nodes
+                clist.append(lst[i]+"|"+lst[j])
                 
-    print "flatmap list ouput: ",finallst            
-    return finallst    
+    print "combination list  ouput: ",clist
+    return clist
 
 
-def mapvalue(x):
-    print "inside mapvaluefunc:",x
-    Setx = set()
+
+
+def quacConditionChecker(x):   # this function removes quasi cliques which do not satisfy the algorithm condition
+    
+    global gamma
     global changevar
+    global k
     print changevar
+    Setx = set()
     keylen = len(x[0])
     y = str(x[1]).split("|")
     
     for i in y:
-        Setx.add(i)
-    st = str() 
-    z=0   
+        Setx.add(i) 
+
+    st = ''
+    z=0
     for i in Setx:
-        print i
         if z>0:
             st = st+"|"+i
         else:
             st = i
             z=1;
+
     vallength = len(Setx)
-    keyval = math.factorial(keylen)/(math.factorial(keylen-2)*2)
+    keyval = int(math.factorial(keylen))/(math.factorial(keylen-2)*2)
+
+    if(keylen > k):
+        keyval = keyval*gamma 
+
+    print "checking condition\n\n\n:",keyval,vallength,changevar,gamma
+    
     if vallength >= keyval:             
-        print "checking condition\n\n:",st,changevar  
         return ("true",st) 
-    print changevar    
     return (changevar,"r") 
 
-f1n = sc.parallelize(firstmr)
-while 1:
-    changevar = False
-    secondmr = f1n.flatMap(mr2func).map(m2func).reduceByKey(lambda a,b:a+"|"+b).map(mapvalue).collect()
-    nextiter = []
-    for x in secondmr:
+
+
+
+ #main function    
+if __name__ == "__main__":
+
+    #global variables
+    global changevar
+    global C
+    global gamma
+    global k
+
+    # command line argument processing
+    try:                                                      
+        opts, args = getopt.getopt(sys.argv[1:],"g:k:")
+    except getopt.GetoptError:
+        print './pyspark quac.py -g <gammavalue> -k <k value>'
+        sys.exit(2)
+    for opt, arg in opts:  
+        if opt == "-g":
+            gamma = float(arg)
+        elif opt =="-k":
+            k = int (arg)
+        elif opt =="-y":
+            print '\n\nusage:'
+            print './pyspark quac.py -g <gammavalue> -k <k value>\n\n'
+            sys.exit(1)
+
+    print 'gamma value =',gamma
+    print 'k value =', k
+
+
+    #lines as a list
+    textFile = sc.textFile("edges.g3").collect()
+
+     #intializing the first set of cliques
+    first=''
+    fields =[]
+    edge = ''
+    for edge in textFile:
+        fields = edge.split(" ")
+        x = '('+fields[0]+','+fields[1]+')'
+        C.add(x)
+
+    print C
+
+    while 1:
+        changevar = False
+
+        lst = list(C)
+        clist  = findCombinations(lst)
+
+        print clist
+        mapinput = sc.parallelize(clist)
+
+
+        secondmr = mapinput.map(formNodeEdgeTuples).reduceByKey(lambda a,b:a+"|"+b).map(quacConditionChecker).collect()
+
+
+        nextiterationlist = []  #remove cliques from list which doesnt satisfy the condition ,these clique tuple have been identigied been identified with special value 
+        for x in secondmr: 
+            print x 
+            if x[1] != 'r':
+                nextiterationlist.append(x)
+
+
+
+        print "\n\n\n\n mapreduce output ::::::",nextiterationlist,changevar
+
+
+        if len(nextiterationlist)==0:  
+            break
+
+
+        temp = set()   
+        for x in nextiterationlist:
+            cliquelist = x[1].split("|")
+            for setA in C:
+                set1 = str(setA)
+                f = set1.split("|")
+                if set(cliquelist)>set(f):
+                    temp.add(set1)
+            C = C-temp
+            C.add(x[1])
+
+        
+        if nextiterationlist[0][0]=="true":
+            changevar = True
+             
+        if changevar == False:
+            break
+
+
+
+
+    print '\nlist of gamma quasi cliques with gamma=',gamma,'k=',k
+    for x in C:
         print x
-        
-        if x[1] != 'r':
-            print "x[1]:",x[1]
-            nextiter.append(x)
-    print "\n\n mapreduce output ::::::",nextiter,changevar,"\n\n"
-    if len(nextiter)==0:
-        break
-    temp = set()
-    for x in nextiter:
-        cliquelist = x[1].split("|")
-        for setA in C:
-            set1 = str(setA)
-            f = set1.split("|")
-            if set(cliquelist)>set(f):
-                temp.add(set1)
-        C = C-temp
-        C.add(x[1])
-    
-    if nextiter[0][0]=="true":
-        print "inside s \n\n\n\n\n"
-        changevar = True
-        
-        
-    
-        
-    if changevar == False:
-        break
-   
-    lst =[]
-    sty = str()
-    j=0
-    for i in range(0,len(nextiter)):
-        if j==0:
-            sty=sty+nextiter[i][1]
-            j=j+1
-        else:   
-            sty=sty+"/"+nextiter[i][1] 
-        
-    print sty         
+    print '\n'
 
-    lst.append((1,sty)) 
-    
-    f1n = sc.parallelize(lst)
 
-print C
+  
