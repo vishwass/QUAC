@@ -6,35 +6,78 @@ import itertools
 import math
 import sys,getopt
 import base64
+import pickle
 from math import *
 from itertools import combinations
 from collections import namedtuple
-
+from Clique import Clique
 
 changevar =True
-initialCvar = True
-C = set()  #the set containing gamma quasi cliques
+cliques = []  #the list containing gamma quasi cliques
 gamma =0.66 #default value of gamma
 k=3   # default value of k-size of the clique after which gamma should be applied
 
 
-# forms tuples with hash of edge as key and edges themselves as tuples
-def formHashEdgeTuples(d):
-    return (hash(d),d)
-
-
- # forms tuples with source as key and edge as value
-def formSourceEdgeTuples(d):
-    print "inside formsourceedgetuples",d
-    nodes = d[1].split(",",1)
-    return (nodes[0],[d[1]])
 
 
 # forms tuples with destination node as the key and edge as the value
-def formDestinationEdgeTuples(d):
-    print "inside formdestinationedgetuples",d
-    nodes = d[1].split(",",1)
-    return (nodes[1],[d[0]])
+def formSourceDestinationEdgeTuples(d):
+    print "inside formdestinationedgetuples\n",d
+    nodes = d.split(" ")
+    edge = str(nodes[0])+","+str(nodes[1])
+    initialclique1= Clique()
+    initialclique1.update(edge,nodes[0],nodes[1])
+    lst =[]
+    print "nodes[0]",nodes[0]
+    a=(nodes[0],initialclique1)
+    b=(nodes[1],initialclique1)
+    lst.append(a)
+    lst.append(b)
+    return lst
+
+
+def maptest(a):
+    print a
+    return a
+
+
+def cliqueUnion(a,b):
+    c = Clique()
+    c.edges =  a.edges|b.edges
+    c.nodes =  a.nodes|b.nodes
+    return c
+
+def cliquemap(input):
+    lister = []
+    for x in input[1].nodes:
+        tup = (x,input[1])
+        lister.append(tup)
+        print "tup",tup[1].nodes
+    return lister
+
+def mergeCliques(input1,input2):
+    global changevar
+    global gamma
+    global cliques
+
+    newcliq = cliqueUnion(input1,input2)
+
+    nnodes = len(newcliq.nodes)
+
+    if len(newcliq.edges) >= gamma * (nnodes*(nnodes-1)/2):
+        changevar =True
+        return newcliq
+
+    # if the criterion is not satisified send an empty clique as it does not form a gamma quasi clique
+    #y = Clique()
+    return input2
+
+
+
+
+
+
+
 
 
  #main function    
@@ -66,39 +109,29 @@ if __name__ == "__main__":
     print 'k value =', k
 
 
-    #lines as a list
-    textFile = sc.textFile("edges.g3").collect()
+    #creating adjacency list
+    cliques= sc.textFile("edges").flatMap(formSourceDestinationEdgeTuples).reduceByKey(lambda a,b:cliqueUnion(a,b)).collect()
 
-     #intializing the first set of cliques
-    first=''
-    fields =[]
-    edge = ''
-    for edge in textFile:
-        fields = edge.split(" ")
-        x = str(fields[0]+','+fields[1])
-        C.add(x)
+    print "initial cliques"
+    for x in cliques :
+        print x[1].edges
 
-    print C
+    cliques = sc.parallelize(cliques)
 
-
-    lst = list(C)
-    firstmapinput = sc.parallelize(lst)
-    firstmroutput = firstmapinput.map(formHashEdgeTuples).collect()
+    while(changevar):
+        changevar = False
+        cliques = cliques.flatMap(cliquemap).reduceByKey(mergeCliques)
 
 
-    secondmapinput =  sc.parallelize(firstmroutput)
-    secondmr1 =  secondmapinput.map(formSourceEdgeTuples).collect()
-    secondmr2 = secondmapinput.map(formDestinationEdgeTuples).collect()
+    cliques = cliques.collect()
 
 
-    creatingthirdmapinput = secondmr1+secondmr2
-    thirdmrinput = sc.parallelize(creatingthirdmapinput)
-    thirdmroutput = thirdmrinput.reduceByKey(lambda a,b:a+b).collect()
 
 
     print '\nlist of gamma quasi cliques with gamma=',gamma,'k=',k
-    for x in thirdmroutput:
-        print x
+    for x in cliques :
+        print "clique",x
+        print x[1].edges
         print '\n'
 
 
