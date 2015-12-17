@@ -12,7 +12,6 @@ from collections import namedtuple
 from Cluster import Cluster
 
 changevar =True
-cliques = []  #the list containing gamma quasi cliques
 gamma =0.66 #default value of gamma
 k=3   # default value of k-size of the clique after which gamma should be applied
 
@@ -31,9 +30,19 @@ def cliquemap(input):
             lister.append(tup)
     return lister
 
-def prepareNextIterationInput(input):
+
+
+def lastcliquemap(input):
+    return (hash(input[1]),input[1])
+
+
+def removeDuplicates(input1,input2):
+	return input1
+
+
+def hashClique(input):
     print "\n\n\niteration output:\n\n\n"
-    print "taskoutput:",input
+    print "hashclique:",input
     lister = []
     newclusters = input[1][1]
     for x in newclusters:
@@ -41,15 +50,21 @@ def prepareNextIterationInput(input):
     return lister
 
 
+def preparelastIterationInput(input):
+    print "\n\n\niteration output:\n\n\n"
+    print "taskoutput:",input
+    lister = []
+    newclusters = input[1][0]
+    for x in newclusters:
+        lister.append(x)
+    return lister
 
 
 def findValidCliques(clist1,clist2):
     global gamma
     global k
     print "find valid cliques"    
-
     changevar = clist1[2] or clist2[2]
-
     temp1set = clist1[0]
     temp2set = clist2[0]
     newcandidates =set()
@@ -85,7 +100,6 @@ def removesubsets(inputset):
 
 
 def combineTheReducers(input1,input2):
-
     rlist1 =set()
     rlist2 =set()
     #tree reduce remove redundant clusters
@@ -95,22 +109,18 @@ def combineTheReducers(input1,input2):
                 rlist1.add(cluster1)
             elif (cluster2[1].isSubsetOf(cluster1[1])):
                 rlist2.add(cluster2)
-
     for x in rlist1:
         input1[1][0].remove(x)
     for y in rlist2:
         input2[1][0].remove(y)
     set1 = input1[1][0].union(input2[1][0])
     set2 = input1[1][0].union(input2[1][0])
-
     change = input1[1][2] or input2[1][2]
-
     return (str(0),(set1,set2,change))
 
 
 
 def returnChangevar(input1,input2):
-
     change = input1[1][2] or input2[1][2]
     return (str(0),(set(),set(),change))
 
@@ -121,7 +131,6 @@ if __name__ == "__main__":
 
     #global variables
     global changevar
-    global C
     global gamma
     global k
 
@@ -158,21 +167,23 @@ if __name__ == "__main__":
         clusters = clusters.flatMap(cliquemap).reduceByKey(findValidCliques)
         changevar = clusters.reduce(returnChangevar)[1][2]
 
+
         iteration = iteration+1
         print "/////////iteration number:",iteration,"/////////"
         print "changevar:",changevar
         if(changevar):
-            clusters = clusters.flatMap(prepareNextIterationInput)
+   	        clusters = clusters.flatMap(hashClique).reduceByKey(removeDuplicates)
             
 
        
-    clusters =clusters.treeReduce(combineTheReducers)
+    clusters =clusters.flatMap(preparelastIterationInput).reduceByKey(removeDuplicates).saveAsTextFile("/user/vishwass/quasicliqueoutputlarge")
 
+    '''
     print '\nlist of gamma quasi cliques with gamma=',gamma,'k=',k,"iterations=",iteration
     print clusters
     for x in clusters[1][1]:
             x[1].clusterPrint()
-
+    '''
     sc.stop()
   
     end = time.time();

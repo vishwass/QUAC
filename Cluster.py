@@ -28,48 +28,42 @@ class Cluster:
 
     def addedge(self,input):
         nodes = input.split(" ")
-        edge = str(nodes[0])+","+str(nodes[1])
-        self.nodes.add(nodes[0])
-        self.nodes.add(nodes[1])
-        self.edges.add(edge)
-        self.hashValue = hash(frozenset(self.edges))
+        if len(nodes) >1:
+            edge = str(nodes[0])+","+str(nodes[1])
+            self.nodes.add(nodes[0])
+            self.nodes.add(nodes[1])
+            self.edges.add(edge)
 
 
-    def unionCluster(self,cluster):
-        newclust =Cluster()
-        newclust.edges = self.edges|cluster.edges
-        newclust.nodes = self.nodes|cluster.nodes
-        return newclust
-
-
-    def getNodes(self):
-        return self.nodes
-
-
-    def numNodes(self):
-        return len(self.nodes)
-
-
-    def numEdges(self):
-        return len(self.edges)
-
-
-    def formHashClique(self):
-        return (hash(self),self)
-
-
-    def isSubsetOf(self,cluster):
-        if(self.edges.issubset(cluster.edges)):
-            return True
-        return False
-
-
+    
     def equals(self,cluster):
         if cluster.nodes== self.edges:
             return True
 
         return False
 
+
+    def formHashClique(self):
+        return (hash(self),self)
+    
+    
+    def getNodes(self):
+        return self.nodes
+
+    
+    
+    def getMaxNode(self):
+        max = 0
+        for x in self.nodes:
+            if(x> max):
+                max =x;
+        return max
+
+
+    def isSubsetOf(self,cluster):
+        if(self.edges.issubset(cluster.edges)):
+            return True
+        return False
 
 
     def isValidClique(self,gamma,k):
@@ -85,5 +79,18 @@ class Cluster:
 
 
 
+    def numNodes(self):
+        return len(self.nodes)
+
+
+    def numEdges(self):
+        return len(self.edges)
+
+
+    def unionCluster(self,cluster):
+        newclust =Cluster()
+        newclust.edges = self.edges|cluster.edges
+        newclust.nodes = self.nodes|cluster.nodes
+        return newclust
 
 
