@@ -1,5 +1,21 @@
+'''
+
+Authors: Vishwas Shanbhog ,Rustom Shroff
+
+University At Buffalo
+CSE 603 Masters Project - Enumeration of Gamma Quasi Clique
+
+Instructor: Professor Jaroslaw Zola
+
+#Main reference to our implementation
+#Reference :http://aluru-sun.ece.iastate.edu/lib/exe/fetch.php?media=papers:closet-wp.pdf
+
+'''
 from pyspark import SparkContext
 from pyspark.accumulators import AccumulatorParam
+from pyspark import StorageLevel
+from pyspark.serializers import MarshalSerializer
+
 from bisect import *
 import time
 import sys,getopt
@@ -13,13 +29,13 @@ class VectorAccumulatorParam(AccumulatorParam):
         return val1 or val2
 
 
-sc = SparkContext(appName="quasicliqueEnumeration")
+sc = SparkContext(appName="quasicliqueEnumeration",serializer=MarshalSerializer())
 
 
 #changevar check whether new clusters are formed and decides whether to go to the next iteration
 changevar= sc.accumulator(bool, VectorAccumulatorParam())
 
-gamma =0.66 #default value of gamma
+gamma =0.9#default value of gamma
 
 k=3   # default value of k-size of the clique after which gamma should be applied
 
@@ -74,6 +90,7 @@ def listUnion(list1,list2):
     return l
 
 
+
 # find newcluster by joining clusters
 def findCliques(clist):
     global gamma
@@ -103,17 +120,23 @@ def findCliques(clist):
 
                 numnodes = len(newclustnodes)
                 numcombinations = numnodes*(numnodes-1)/2
-                d = numnodes*numnodes-numnodes
-                d = 200*len(newclustedges)/d
+                d = 2*len(newclustedges)/numcombinations
                 merge = True
-                if  d >= gamma*100:
+                if  d >= gamma:
                     if numnodes > k:
-                        if(len(newclustedges) >= min((gamma *numcombinations),numcombinations)):
-                            #print "new cluster",newclustedges
-                            merge = True
+                        #optimization Reference :http://aluru-sun.ece.iastate.edu/lib/exe/fetch.php?media=papers:closet-wp.pdf
+                        count = []
+                        for i in range(0,len(newclustnodes)):
+                            count.append(0)
+                        for j in range(0,len(newclustedgelist)):
+                            for i in range(0,len(newclustnodes)):
+                                if newclustedgelist[j][0] ==newclustnodes[i] or newclustedgelist[j][1] == newclustnodes[i]:
+                                    count[i] +=1
+                            for x in count:
+                                if x <2:
+                                    merge = False
                         else:
                             merge = False
-                            break
                 else:
                     merge = False
 
@@ -165,8 +188,6 @@ def findCliques(clist):
             clusterlist.append((newclustedgelist[clustnodes[pos][0]][0],[edges,False]))
             clustnodes = []
 
-
-
         if len(clusterlist)>2000:
             print "numclusters:",len(clusterlist)
             return clusterlist+falselist
@@ -175,6 +196,7 @@ def findCliques(clist):
         flag = []
         for x in range(0,len(clusterlist)):
             flag.append(False)
+
 
 
 #simple merge efficient but doesnt take care of hash key collision
@@ -291,7 +313,7 @@ if __name__ == "__main__":
 
 
     #creating initial set of clusters
-    clusters= sc.textFile("edges").map(createinitialClusters)
+    clusters= sc.textFile("edges.g3").map(createinitialClusters)
     iter = 0
     changevar.value = True
     while(changevar.value):
@@ -299,7 +321,7 @@ if __name__ == "__main__":
         iter+=1
 
         #find new clusters
-        clusters = clusters.flatMap(cliqueMap).groupByKey(numPartitions=4).flatMap(findCliques).cache()
+        clusters = clusters.flatMap(cliqueMap).groupByKey(numPartitions=2).flatMap(findCliques).persist(StorageLevel.MEMORY_AND_DISK_SER)
 
         #update accumulator variable changevar
         clusters.foreach(updateChangeVar)
@@ -314,7 +336,7 @@ if __name__ == "__main__":
         print "iteration:time =",iter,":",(end - beg)
 
 
-    clusters = clusters.saveAsTextFile("500_clusters4n48ex1excors")
+    clusters = clusters.saveAsTextFile("500_g0.9clusters4n48ex1excors")
     sc.stop()
     end = time.time()
     print "total time =", (end - beg)
